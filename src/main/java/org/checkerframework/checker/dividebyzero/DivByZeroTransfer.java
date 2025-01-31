@@ -76,9 +76,65 @@ public class DivByZeroTransfer extends CFTransfer {
    */
   private AnnotationMirror refineLhsOfComparison(
       Comparison operator, AnnotationMirror lhs, AnnotationMirror rhs) {
-    // TODO
+      
+      if (rhs.getAnnotationType() == Undefined.class) {
+        return reflect((Undefined.class)); 
+      }
+
+      switch (operator) {
+        case EQ:
+            // If "lhs == rhs" is true:
+            //   if rhs is Zero => lhs must be Zero
+            //   if rhs is Positive => lhs must be Positive
+            //   if rhs is Negative => lhs must be Negative
+            if (rhs.getAnnotationType() == Interval.class) {
+                return glb(lhs, rhs);
+            } else if (rhs.getAnnotationType() == Undefined.class) {
+                return glb(lhs, reflect(Undefined.class));
+            }
+            break;
+
+        case NE:
+          return reflect(Bottom.class);
+          break; 
+
+        case LT:
+          
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("min", Integer.MIN_VALUE)
+          .setValue("max", rhs.getElementValues().get("max"))
+          .build();
+
+          break; 
+
+        case LE:
+
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("min", Integer.MIN_VALUE)
+          .setValue("max", rhs.getElementValues().get("max"))
+          .build();
+          
+          break; 
+
+        case GT:
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("max", Integer.MAX_VALUE)
+          .setValue("min", rhs.getElementValues().get("min"))
+          .build();
+            
+          break; 
+        case GE:
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("max", Integer.MAX_VALUE)
+          .setValue("min", rhs.getElementValues().get("min"))
+          .build();
+            
+          break; 
+    }
+
     return lhs;
   }
+
 
   /**
    * For an arithmetic expression (lhs `op` rhs), compute the point in the lattice for the result of
@@ -97,7 +153,78 @@ public class DivByZeroTransfer extends CFTransfer {
    */
   private AnnotationMirror arithmeticTransfer(
       BinaryOperator operator, AnnotationMirror lhs, AnnotationMirror rhs) {
-    // TODO
+      
+      if (lhs.getClass() == Undefined.class || rhs.getClass() == Undefined.class) {
+        return reflect(Undefined.class); 
+      }
+
+      if (lhs.getClass() == Bottom.class || rhs.getClass() == Bottom.class) {
+        return reflect(Bottom.class); 
+      }
+
+      if (lhs.getClass() == Top.class || rhs.getClass() == Top.class) {
+        return reflect(Top.class); 
+      }
+
+      int lhs_min = lhs.getElementValues().get("min"); 
+      int lhs_max = lhs.getElementValues().get("max");
+      int rhs_min = rhs.getElementValues().get("min");
+      int rhs_max = rhs.getElementValues().get("max");
+
+      int new_min = 0;
+      int new_max = 0;
+
+      switch (operator) {
+        case PLUS:
+
+          new_min = lhs_min + rhs_min; 
+          new_max = lhs_max + rhs_max; 
+
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("min", new_min)
+          .setValue("max", new_max)
+          .build();
+
+        case MINUS:
+
+          new_min = lhs_min - rhs_min; 
+          new_max = lhs_max - rhs_max; 
+
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("min", new_min)
+          .setValue("max", new_max)
+          .build();
+
+        case TIMES:
+
+        new_min = Math.min(lhs_min*rhs_min, lhs_min*rhs_max, lhs_max*rhs_min, lhs_max*rhs_max);
+        new_max = Math.max(lhs_min*rhs_min, lhs_min*rhs_max, lhs_max*rhs_min, lhs_max*rhs_max); 
+
+        return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+        .setValue("min", new_min)
+        .setValue("max", new_max)
+        .build();
+
+        case DIVIDE:
+
+          if (rhs_min <=0 && rhs_max >=0) {
+            return reflect(Undefined.class); 
+          }
+
+          int rhs_min_new = 1 / rhs_max; 
+          int rhs_max_new = 1 / rhs_min; 
+
+          rhs_min = rhs_min_new; 
+          rhs_max = rhs_max_new;
+
+          new_min = Math.min(lhs_min*rhs_min, lhs_min*rhs_max, lhs_max*rhs_min, lhs_max*rhs_max);
+          new_max = Math.max(lhs_min*rhs_min, lhs_min*rhs_max, lhs_max*rhs_min, lhs_max*rhs_max); 
+
+          return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+          .setValue("min", new_min)
+          .setValue("max", new_max)
+          .build();
+    }
     return top();
   }
 
@@ -121,11 +248,37 @@ public class DivByZeroTransfer extends CFTransfer {
 
   /** Compute the least-upper-bound of two points in the lattice */
   private AnnotationMirror lub(AnnotationMirror x, AnnotationMirror y) {
+
+    if (x.getClass() == Interval.class && y.getClass() == Interval.class) {
+
+      int min = Math.min(x.getElementValues.get("min"), y.getElementValues.get("min"));
+      int max = Math.max(x.getElementValues.get("max"), y.getElementValues.get("max"));
+
+      AnnotationMirror thisInterval = new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+      .setValue("min", min)
+      .setValue("max", max)
+      .build();
+
+      return thisInterval;
+    }
+
     return analysis.getTypeFactory().getQualifierHierarchy().leastUpperBoundQualifiersOnly(x, y);
   }
 
   /** Compute the greatest-lower-bound of two points in the lattice */
   private AnnotationMirror glb(AnnotationMirror x, AnnotationMirror y) {
+
+    if (x.getAnnotationType() == Interval.class && y.getAnnotationType() == Interval.class) {
+
+      int new_min = Math.min(x.getElementValues().get("min"), y.getElementValues().get("min")); 
+      int new_max = Math.min(x.getElementValues().get("max"), y.getElementValues().get("max")); 
+    
+      return new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+      .setValue("min", new_min)
+      .setValue("max", new_max)
+      .build();
+    }
+    
     return analysis.getTypeFactory().getQualifierHierarchy().greatestLowerBoundQualifiersOnly(x, y);
   }
 
@@ -137,6 +290,17 @@ public class DivByZeroTransfer extends CFTransfer {
 
   /** Determine whether two AnnotationMirrors are the same point in the lattice */
   private boolean equal(AnnotationMirror x, AnnotationMirror y) {
+
+    if (x.getClass() == Interval.class && y.getClass() == Interval.class) {
+
+      if (x.getElementValues.get("min") == y.getElementValues.get("min")
+       && x.getElementValues.get("max") == y.getElementValues.get("max")) {
+        return true;
+       } else {
+        return false;
+       }
+    }
+
     return AnnotationUtils.areSame(x, y);
   }
 

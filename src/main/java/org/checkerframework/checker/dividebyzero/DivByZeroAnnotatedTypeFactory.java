@@ -28,7 +28,7 @@ public class DivByZeroAnnotatedTypeFactory extends BaseAnnotatedTypeFactory {
     switch (literal.getKind()) {
       case INT_LITERAL:
         int intValue = (Integer) literal.getValue();
-        // TODO
+        return Interval.class;
         break;
       case LONG_LITERAL:
         long longValue = (Long) literal.getValue();
@@ -57,16 +57,39 @@ public class DivByZeroAnnotatedTypeFactory extends BaseAnnotatedTypeFactory {
       super(atypeFactory);
     }
 
+    // @Override
+    // public Void visitLiteral(LiteralTree tree, AnnotatedTypeMirror type) {
+    //   if (tree.getKind() == Tree.Kind.NULL_LITERAL) {
+    //     return super.visitLiteral(tree, type);
+    //   }
+    //   Class<? extends Annotation> c = defaultAnnotation(tree);
+    //   AnnotationMirror m = AnnotationBuilder.fromClass(getProcessingEnv().getElementUtils(), c);
+    //   type.replaceAnnotation(m);
+    //   return null;
+    // }
+
     @Override
-    public Void visitLiteral(LiteralTree tree, AnnotatedTypeMirror type) {
+    public Void visitLiteral(LiteralTree node, AnnotatedTypeMirror p) {
       if (tree.getKind() == Tree.Kind.NULL_LITERAL) {
         return super.visitLiteral(tree, type);
       }
-      Class<? extends Annotation> c = defaultAnnotation(tree);
-      AnnotationMirror m = AnnotationBuilder.fromClass(getProcessingEnv().getElementUtils(), c);
-      type.replaceAnnotation(m);
-      return null;
+
+        if (node.getKind() == com.sun.source.tree.Tree.Kind.INT_LITERAL) {
+            int value = (Integer) node.getValue();
+
+            int min = value;
+            int max = value;
+            AnnotationMirror thisInterval = new AnnotationBuilder(atypeFactory.getProcessingEnv(), Interval.class)
+                    .setValue("min", min)
+                    .setValue("max", max)
+                    .build();
+
+            // Attach the annotation to the type
+            p.addAnnotation(thisInterval);
+        }
+        return super.visitLiteral(node, p);
     }
+
 
     // The AnnotatedTypeFactory only applies types computed by dataflow if they are a subtype of the
     // type it computed.  So, to get the transfer rules to work properly, we must override the
